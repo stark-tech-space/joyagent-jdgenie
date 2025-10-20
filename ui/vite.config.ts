@@ -33,6 +33,9 @@ export default defineConfig(({ command, mode }) => {
       // 一定要序列化，否则打包时会报错
       SERVICE_BASE_URL: JSON.stringify(env.SERVICE_BASE_URL),
     },
+    preview: {
+      allowedHosts: true,
+    },
     build: {
       outDir: 'dist',
       sourcemap: false,

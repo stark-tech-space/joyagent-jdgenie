@@ -1,5 +1,5 @@
-# 前端构建阶段
-FROM docker.m.daocloud.io/library/node:20-alpine as frontend-builder
+# 前端构建阶段 (使用slim而不是alpine以确保与最终运行环境兼容)
+FROM docker.m.daocloud.io/library/node:20-slim as frontend-builder
 WORKDIR /app
 RUN npm install -g pnpm
 COPY ui/package.json ./
@@ -21,44 +21,33 @@ RUN ./build.sh
 FROM docker.m.daocloud.io/library/python:3.11-slim as python-base
 WORKDIR /app
 
-RUN rm /etc/apt/sources.list.d/* && echo 'deb https://mirrors.aliyun.com/debian/ bookworm main contrib non-free non-free-firmware' \
-      > /etc/apt/sources.list && \
-    echo 'deb https://mirrors.aliyun.com/debian-security bookworm-security main contrib non-free non-free-firmware' \
-      >> /etc/apt/sources.list && \
-    echo 'deb https://mirrors.aliyun.com/debian/ bookworm-updates main contrib non-free non-free-firmware' \
-      >> /etc/apt/sources.list
-
-RUN apt-get clean && \
-    apt-get update && \
+RUN apt-get update && \
     apt-get install -y --no-install-recommends \
     build-essential \
     netcat-openbsd \
     procps \
     curl \
     && rm -rf /var/lib/apt/lists/*
-RUN pip install uv
+
+RUN pip config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple && \
+    pip install uv
 
 # 最终运行阶段
 FROM docker.m.daocloud.io/library/python:3.11-slim
 
 # 安装系统依赖
-RUN rm /etc/apt/sources.list.d/* && echo 'deb https://mirrors.aliyun.com/debian/ bookworm main contrib non-free non-free-firmware' \
-      > /etc/apt/sources.list && \
-    echo 'deb https://mirrors.aliyun.com/debian-security bookworm-security main contrib non-free non-free-firmware' \
-      >> /etc/apt/sources.list && \
-    echo 'deb https://mirrors.aliyun.com/debian/ bookworm-updates main contrib non-free non-free-firmware' \
-      >> /etc/apt/sources.list
-RUN apt-get clean && \
-    apt-get update && \
+RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-    openjdk-17-jre-headless \
+    openjdk-21-jre-headless \
     netcat-openbsd \
     procps \
     curl \
     nodejs \
     npm \
-    && rm -rf /var/lib/apt/lists/* \
-    && npm install -g pnpm
+    && rm -rf /var/lib/apt/lists/*
+
+RUN npm config set registry https://registry.npmmirror.com && \
+    npm install -g pnpm
 
 # 设置工作目录
 WORKDIR /app
@@ -67,6 +56,8 @@ WORKDIR /app
 COPY --from=frontend-builder /app/dist /app/ui/dist
 COPY --from=frontend-builder /app/package.json /app/ui/package.json
 COPY --from=frontend-builder /app/node_modules /app/ui/node_modules
+COPY --from=frontend-builder /app/vite.config.ts /app/ui/vite.config.ts
+COPY --from=frontend-builder /app/.env /app/ui/.env
 
 # 复制后端构建产物
 COPY --from=backend-builder /app/target /app/backend/target
